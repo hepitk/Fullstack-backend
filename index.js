@@ -14,6 +14,20 @@ morgan.token('body', (req) => {
 
 app.use(morgan(':method :url :status :res[content-length] - :response-time ms :body'));
 
+app.use((error, req, res, next) => {
+    console.error(error.message);
+
+    if (error.name === 'CastError') {
+        return res.status(400).send({ error: 'malformatted id' });
+    } else if (error.name === 'ValidationError') {
+        return res.status(400).json({ error: error.message });
+    } else if (error.name === 'MongoServerError' && error.code === 11000) {
+        return res.status(400).json({ error: 'name must be unique' });
+    }
+
+    next(error);
+});
+
 const persons = [
     { id: 1, name: "Arto Hellas", number: "040-123456" },
     { id: 2, name: "Ada Lovelace", number: "39-44-5323523" },
@@ -27,10 +41,12 @@ app.get('/api/persons', (req, res) => {
     });
 });
 
-app.get('/info', (req, res) => {
-    Person.countDocuments({}).then(count => {
-        res.send(`<p>Phonebook has info for ${count} people</p><p>${new Date()}</p>`);
-    });
+app.get('/info', (req, res, next) => {
+    Person.countDocuments({})
+        .then(count => {
+            res.send(`<p>Phonebook has info for ${count} people</p><p>${new Date()}</p>`);
+        })
+        .catch(error => next(error));
 });
 
 app.get('/api/persons/:id', (req, res, next) => {
@@ -51,30 +67,22 @@ app.delete('/api/persons/:id', (req, res, next) => {
             if (result) {
                 res.status(204).end();
             } else {
-                res.status(404).end();
+                res.status(404).json({ error: 'Entry not found' });
             }
         })
         .catch(error => next(error));
 });
 
-app.post('/api/persons', (req, res, next) => {
-    const body = req.body;
+app.put('/api/persons/:id', (req, res, next) => {
+    const { name, number } = req.body;
 
-    if (!body.name || !body.number) {
-        return res.status(400).json({ error: 'The name or number is missing' });
-    } else if (persons.some(person => person.name === body.name)) {
-        return res.status(400).json({ error: 'name must be unique' });
-    }
-
-    const person = new Person({
-        name: body.name,
-        number: body.number,
-    });
-
-    person.save()
-        .then(savedPerson => savedPerson.toJSON())
-        .then(savedAndFormattedPerson => {
-            res.json(savedAndFormattedPerson);
+    Person.findByIdAndUpdate(
+        req.params.id,
+        { name, number },
+        { new: true, runValidators: true, context: 'query' }
+    )
+        .then(updatedPerson => {
+            res.json(updatedPerson);
         })
         .catch(error => next(error));
 });
