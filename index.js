@@ -3,6 +3,7 @@ const Person = require('./models/persons');
 const morgan = require('morgan');
 const cors = require('cors');
 const app = express();
+require('dotenv').config();
 
 app.use(cors());
 app.use(express.json());
@@ -54,7 +55,7 @@ app.put('/api/persons/:id', (req, res, next) => {
 });
 
 app.delete('/api/persons/:id', (req, res, next) => {
-    Person.findByIdAndRemove(req.params.id)
+    Person.findOneAndDelete({ _id: req.params.id })
         .then(result => {
             if (result) res.status(204).end();
             else res.status(404).send({ error: 'Entry not found' });
